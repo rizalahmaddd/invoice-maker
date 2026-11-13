@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { createRevision, db, deleteInvoice, deriveStatus, getTemplate, isBlank, renumberForDate, saveEditedInvoice } from '../db';
+import { createRevision, db, deleteInvoice, deriveStatus, getTemplate, isBlank, mergeClient, renumberForDate, saveEditedInvoice } from '../db';
 import { useAllTemplates, useInvoicePdf, useSettings, useWide } from '../hooks';
 import { CURRENCIES, computeTotals, displayDecimals, formatMoney, lineTotals } from '../lib/money';
 import { addDays, daysBetween, uid } from '../lib/id';
 import { formatDate } from '../lib/labels';
 import { clientCode, formatNumberPattern } from '../lib/numbering';
-import type { Adjustment, Client, Invoice, LineItem, TemplateConfig } from '../types';
+import type { Adjustment, Invoice, LineItem, TemplateConfig } from '../types';
 
 type KnownItem = Pick<LineItem, 'detail' | 'unit' | 'price'>;
 import { PageHeader } from '../components/layout';
@@ -196,12 +196,13 @@ export function InvoiceEditor() {
       let clientId = cur.clientId;
       if (cur.client.name.trim()) {
         const now = Date.now();
-        if (clientId && (await db.clients.get(clientId))) {
-          await db.clients.update(clientId, { ...cur.client, updatedAt: now });
+        const linked = clientId ? await db.clients.get(clientId) : undefined;
+        if (clientId && linked) {
+          await db.clients.update(clientId, mergeClient(linked, cur.client, now));
         } else {
           const existing = await db.clients.where('name').equalsIgnoreCase(cur.client.name.trim()).first();
           clientId = existing?.id ?? uid();
-          await db.clients.put({ ...(existing ?? { createdAt: now }), ...cur.client, id: clientId, updatedAt: now } as Client);
+          await db.clients.put({ ...mergeClient(existing, cur.client, now), id: clientId });
         }
       }
       const next = { ...cur, clientId, updatedAt: Date.now() };

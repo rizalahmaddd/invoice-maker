@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { createRevision, db, deleteInvoice, deriveStatus, getTemplate, renumberForDate, saveEditedInvoice } from '../db';
+import { createRevision, db, deleteInvoice, deriveStatus, getTemplate, isBlank, renumberForDate, saveEditedInvoice } from '../db';
 import { useAllTemplates, useInvoicePdf, useSettings, useWide } from '../hooks';
 import { CURRENCIES, computeTotals, displayDecimals, formatMoney, lineTotals } from '../lib/money';
 import { addDays, daysBetween, uid } from '../lib/id';
@@ -78,8 +78,7 @@ export function InvoiceEditor() {
       window.removeEventListener('pagehide', flush);
       const cur = latest.current;
       if (!cur) return;
-      const empty = !cur.client.name.trim() && cur.items.every((i) => !i.description.trim() && !i.price);
-      if (fresh && empty) deleteInvoice(cur.id);
+      if (fresh && isBlank(cur)) deleteInvoice(cur.id);
       else flush();
     };
   }, [fresh]);

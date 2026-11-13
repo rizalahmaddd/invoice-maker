@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { createInvoice, db, deriveStatus } from '../db';
+import { createInvoice, db, deriveStatus, invoiceHref } from '../db';
 import { useSettings, useStoredState, useWide } from '../hooks';
 import { computeTotals, formatMoney } from '../lib/money';
 import { formatDate } from '../lib/labels';
@@ -497,7 +497,7 @@ function InvoiceTableRow({
   today: string;
 }) {
   const navigate = useNavigate();
-  const targetUrl = inv.status === 'draft' ? `/invoice/${inv.id}/edit` : `/invoice/${inv.id}`;
+  const targetUrl = invoiceHref(inv);
 
   let dueText = '-';
   let isOverdue = false;
@@ -594,7 +594,7 @@ function InvoiceCardRow({
 
   return (
     <Link
-      to={inv.status === 'draft' ? `/invoice/${inv.id}/edit` : `/invoice/${inv.id}`}
+      to={invoiceHref(inv)}
       className="group block rounded-2xl border border-line bg-surface p-4.5 shadow-xs transition-all hover:border-clay/50 hover:shadow-sm"
     >
       <div className="flex items-start justify-between gap-3">

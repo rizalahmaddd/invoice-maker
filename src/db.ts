@@ -289,6 +289,17 @@ export function deriveStatus(inv: Invoice, today = todayISO()): Status {
   return 'sent';
 }
 
+// A draft nobody has filled in yet: no client and no item with a description or price.
+export function isBlank(inv: Pick<Invoice, 'client' | 'items'>): boolean {
+  return !inv.client.name.trim() && inv.items.every((i) => !i.description.trim() && !i.price);
+}
+
+// Where a click on an invoice in the list should land. Only a blank draft goes straight to the editor;
+// anything with content opens the view, and the editor stays one click away from there.
+export function invoiceHref(inv: Pick<Invoice, 'id' | 'status' | 'client' | 'items'>): string {
+  return inv.status === 'draft' && isBlank(inv) ? `/invoice/${inv.id}/edit` : `/invoice/${inv.id}`;
+}
+
 export async function requestPersistentStorage(): Promise<boolean | undefined> {
   if (!navigator.storage?.persist) return undefined;
   if (await navigator.storage.persisted()) return true;

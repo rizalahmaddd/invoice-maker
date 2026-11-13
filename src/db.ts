@@ -289,6 +289,35 @@ export function deriveStatus(inv: Invoice, today = todayISO()): Status {
   return 'sent';
 }
 
+// What to store on the saved client when an invoice is finished. A field left blank on the invoice never
+// erases what the client already has: typing an existing client's name by hand gives a blank invoice
+// client, and saving that must not wipe the client's address, email and tax id.
+// A name that only differs in letter case keeps the saved spelling.
+export function mergeClient(existing: Client | undefined, typed: Invoice['client'], now: number): Omit<Client, 'id'> {
+  const keep = (k: 'contactPerson' | 'email' | 'phone' | 'address' | 'taxId') => (typed[k].trim() ? typed[k] : (existing?.[k] ?? ''));
+  return {
+    name: existing && existing.name.trim().toLowerCase() === typed.name.trim().toLowerCase() ? existing.name : typed.name,
+    contactPerson: keep('contactPerson'),
+    email: keep('email'),
+    phone: keep('phone'),
+    address: keep('address'),
+    taxId: keep('taxId'),
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+}
+
+// A draft nobody has filled in yet: no client and no item with a description or price.
+export function isBlank(inv: Pick<Invoice, 'client' | 'items'>): boolean {
+  return !inv.client.name.trim() && inv.items.every((i) => !i.description.trim() && !i.price);
+}
+
+// Where a click on an invoice in the list should land. Only a blank draft goes straight to the editor;
+// anything with content opens the view, and the editor stays one click away from there.
+export function invoiceHref(inv: Pick<Invoice, 'id' | 'status' | 'client' | 'items'>): string {
+  return inv.status === 'draft' && isBlank(inv) ? `/invoice/${inv.id}/edit` : `/invoice/${inv.id}`;
+}
+
 export async function requestPersistentStorage(): Promise<boolean | undefined> {
   if (!navigator.storage?.persist) return undefined;
   if (await navigator.storage.persisted()) return true;

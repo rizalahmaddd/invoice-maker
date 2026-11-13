@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, getSettings } from './db';
 import { BUILTIN_TEMPLATES, normalizeTemplate } from './templates';
@@ -6,6 +6,10 @@ import type { Invoice, Settings, Status, TemplateConfig } from './types';
 
 export function useSettings(): Settings | undefined {
   return useLiveQuery(() => getSettings(), []);
+}
+
+export function useRecurrences() {
+  return useLiveQuery(() => db.recurrences.orderBy('nextRun').toArray(), []);
 }
 
 export function useAllTemplates(): TemplateConfig[] | undefined {
@@ -69,6 +73,111 @@ export function useDebouncedEffect(fn: () => void, deps: unknown[], delay: numbe
     const t = setTimeout(() => saved.current(), delay);
     return () => clearTimeout(t);
   }, deps);
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+// The event fires once, often before the install card mounts, so it is captured at module level.
+let installEvent: BeforeInstallPromptEvent | null = null;
+const installSubscribers = new Set<() => void>();
+const notifyInstall = () => installSubscribers.forEach((fn) => fn());
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installEvent = e as BeforeInstallPromptEvent;
+    notifyInstall();
+  });
+  window.addEventListener('appinstalled', () => {
+    installEvent = null;
+    notifyInstall();
+  });
+}
+
+export function isStandalone() {
+  return (
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+function isIOSDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
+const INSTALL_DISMISSED_KEY = 'install_dismissed';
+
+export function useInstallPrompt() {
+  const [event, setEvent] = useState<BeforeInstallPromptEvent | null>(installEvent);
+  const [installed, setInstalled] = useState(() => isStandalone());
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(INSTALL_DISMISSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const fn = () => {
+      setEvent(installEvent);
+      setInstalled(isStandalone());
+    };
+    installSubscribers.add(fn);
+    return () => {
+      installSubscribers.delete(fn);
+    };
+  }, []);
+
+  const promptInstall = useCallback(async () => {
+    if (!installEvent) return 'unavailable' as const;
+    try {
+      await installEvent.prompt();
+      const { outcome } = await installEvent.userChoice;
+      installEvent = null;
+      if (outcome === 'accepted') setInstalled(true);
+      return outcome;
+    } catch {
+      return 'unavailable' as const;
+    }
+  }, []);
+
+  const dismiss = useCallback(() => {
+    try {
+      localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
+    } catch {
+      /* private mode */
+    }
+    setDismissed(true);
+  }, []);
+
+  return { canInstall: !!event, installed, ios: isIOSDevice(), dismissed, promptInstall, dismiss };
+}
+
+export function useStorageHealth() {
+  const [state, setState] = useState({ usage: 0, quota: 0, persisted: null as boolean | null, loading: true });
+
+  const refresh = useCallback(() => {
+    setState((s) => ({ ...s, loading: true }));
+    Promise.all([
+      navigator.storage?.estimate?.() ?? Promise.resolve({ usage: 0, quota: 0 }),
+      navigator.storage?.persisted?.() ?? Promise.resolve(null),
+    ])
+      .then(([estimate, persisted]) => {
+        setState({ usage: estimate.usage ?? 0, quota: estimate.quota ?? 0, persisted, loading: false });
+      })
+      .catch(() => setState((s) => ({ ...s, loading: false })));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const percent = state.quota > 0 ? (state.usage / state.quota) * 100 : 0;
+  return { ...state, percent, refresh };
 }
 
 export function useStoredState<T>(key: string, initial: T, storage: 'local' | 'session' = 'local') {

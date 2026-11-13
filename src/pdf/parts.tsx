@@ -87,7 +87,7 @@ export function MetaRows({ ctx, labelColor, valueColor, align = 'right', withNum
   const rows: [string, string][] = [];
   if (withNumber) rows.push([ctx.L.number, ctx.inv.number]);
   rows.push([ctx.L.issueDate, ctx.date(ctx.inv.issueDate)]);
-  if (ctx.inv.dueDate && ctx.tpl.show.dueDate) rows.push([ctx.L.dueDate, ctx.date(ctx.inv.dueDate)]);
+  if (ctx.inv.dueDate && ctx.tpl.show.dueDate) rows.push([ctx.isQuote ? ctx.L.validUntil : ctx.L.dueDate, ctx.date(ctx.inv.dueDate)]);
   if (ctx.inv.reference && ctx.tpl.show.reference) rows.push([ctx.L.reference, ctx.inv.reference]);
   return (
     <View>
@@ -302,6 +302,7 @@ export function Terbilang({ ctx, color }: { ctx: DocCtx; color?: string }) {
 }
 
 export function PaymentInfo({ ctx, color, labelColor, stacked }: { ctx: DocCtx; color?: string; labelColor?: string; stacked?: boolean }) {
+  if (ctx.isQuote) return null;
   const banks = ctx.tpl.show.bankAccounts ? ctx.banks : [];
   const qris = ctx.tpl.show.qris && ctx.inv.showQris ? ctx.s.qris : undefined;
   if (banks.length === 0 && !qris) return null;
@@ -389,6 +390,7 @@ export function Signature({ ctx, align = 'center', width = 150 }: { ctx: DocCtx;
 // "float" takes no height: it hangs in the empty space beside the totals so a paid invoice never spills
 // onto a second page. "page" pins it to a fixed spot for layouts whose margins are empty (Struk).
 export function StatusStamp({ ctx, mode = 'float', align = 'left' }: { ctx: DocCtx; mode?: 'float' | 'flow' | 'page'; align?: 'left' | 'center' | 'right' }) {
+  if (ctx.isQuote) return null;
   const paid = ctx.status === 'paid' && ctx.tpl.show.paidStamp;
   const voided = ctx.status === 'void';
   if (!paid && !voided) return null;
@@ -440,6 +442,7 @@ export function PageFooter({ ctx, color, left }: { ctx: DocCtx; color?: string; 
 }
 
 export function PaymentBox({ ctx, labelColor }: { ctx: DocCtx; labelColor?: string }) {
+  if (ctx.isQuote) return null;
   const hasBanks = ctx.tpl.show.bankAccounts && ctx.banks.length > 0;
   const hasQris = ctx.tpl.show.qris && ctx.inv.showQris && !!ctx.s.qris;
   if (!hasBanks && !hasQris) return null;

@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, updateSettings } from '../db';
-import { useAllTemplates, useSettings } from '../hooks';
+import { db, requestPersistentStorage, updateSettings } from '../db';
+import { useAllTemplates, useSettings, useStorageHealth } from '../hooks';
 import { exportBackup, importBackup, markBackedUp, readBackup, type ImportMode } from '../lib/backup';
 import { imageToDataURL, shareOrDownload } from '../lib/files';
 import { CURRENCIES } from '../lib/money';
@@ -11,12 +11,15 @@ import { todayISO, uid } from '../lib/id';
 import { formatDate } from '../lib/labels';
 import type { NumberingRule, Settings } from '../types';
 import { PageHeader } from '../components/layout';
+import { InstallApp } from '../components/InstallApp';
+import { SignaturePad } from '../components/SignaturePad';
 import { Button, Card, Field, IconButton, ImagePicker, Loading, NumberInput, Segmented, Select, Sheet, TextArea, TextInput, Toggle, useUI } from '../components/ui';
 import { IconDownload, IconPlus, IconTrash, IconUpload } from '../components/icons';
 
-type Editable = Omit<Settings, 'numbering' | 'receiptNumbering'> & {
+type Editable = Omit<Settings, 'numbering' | 'receiptNumbering' | 'quoteNumbering'> & {
   numbering: Omit<NumberingRule, 'counters'>;
   receiptNumbering: Omit<NumberingRule, 'counters'>;
+  quoteNumbering: Omit<NumberingRule, 'counters'>;
 };
 
 function Section({ id, title, desc, children }: { id?: string; title: string; desc?: string; children: ReactNode }) {
@@ -51,6 +54,7 @@ export function SettingsPage() {
     if (location.hash === '#numbering') return 'default';
     return 'profil';
   });
+  const [sigMode, setSigMode] = useState<'upload' | 'draw'>('upload');
 
   useEffect(() => {
     if (location.hash === '#backup') setTab('backup');
@@ -74,6 +78,7 @@ export function SettingsPage() {
         ...s,
         numbering: { ...cur.numbering, format: s.numbering.format, reset: s.numbering.reset },
         receiptNumbering: { ...cur.receiptNumbering, format: s.receiptNumbering.format, reset: s.receiptNumbering.reset },
+        quoteNumbering: { ...cur.quoteNumbering, format: s.quoteNumbering.format, reset: s.quoteNumbering.reset },
         lastBackupAt: cur.lastBackupAt,
       }));
     }, 400);
@@ -142,9 +147,30 @@ export function SettingsPage() {
               </div>
             </Section>
 
-            <Section title="Tanda tangan & stempel" desc="Foto tanda tangan di kertas putih, lalu unggah. Latar putih akan dihapus otomatis.">
+            <Section title="Tanda tangan & stempel" desc="Unggah foto tanda tangan di kertas putih, atau gambar langsung di layar. Latar putih foto dihapus otomatis.">
               <div className="flex flex-col gap-4">
-                <ImageField label="Tanda tangan" value={s.signature.image} onChange={(v) => patch({ signature: { ...s.signature, image: v } })} removeWhite checkered />
+                <Segmented
+                  label="Cara mengisi tanda tangan"
+                  value={sigMode}
+                  onChange={setSigMode}
+                  options={[
+                    { value: 'upload', label: 'Unggah foto' },
+                    { value: 'draw', label: 'Gambar di layar' },
+                  ]}
+                />
+                {sigMode === 'upload' ? (
+                  <ImageField label="Tanda tangan" value={s.signature.image} onChange={(v) => patch({ signature: { ...s.signature, image: v } })} removeWhite checkered />
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <SignaturePad onChange={(v) => patch({ signature: { ...s.signature, image: v } })} />
+                    {s.signature.image && (
+                      <div className="flex items-center gap-2 text-xs text-muted">
+                        <img src={s.signature.image} alt="Tanda tangan tersimpan" className="h-12 rounded-lg border border-line bg-white object-contain px-2" />
+                        <span>Tersimpan. Gambar ulang untuk mengganti.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <ImageField label="Stempel" hint="Opsional" value={s.stamp} onChange={(v) => patch({ stamp: v })} removeWhite checkered />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Nama penanda tangan" htmlFor="sig-name">
@@ -229,11 +255,20 @@ export function SettingsPage() {
               </Link>
             </Section>
 
+            <Section title="Invoice berulang" desc="Buat draft otomatis tiap bulan, 3 bulan, atau tahun dari invoice yang sudah ada.">
+              <Link to="/berulang" className="inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-4 text-sm font-semibold hover:bg-sunken">
+                Kelola jadwal berulang →
+              </Link>
+            </Section>
+
             <Section id="numbering" title="Penomoran" desc="Nomor diberikan saat invoice dibuat dan tetap bisa diubah manual.">
               <NumberingEditor kind="numbering" s={s} settings={settings} onChange={(r) => patch({ numbering: r })} />
               <div className="my-5 border-t border-line" />
               <p className="mb-3 text-sm font-bold">Nomor kwitansi</p>
               <NumberingEditor kind="receiptNumbering" s={s} settings={settings} onChange={(r) => patch({ receiptNumbering: r })} />
+              <div className="my-5 border-t border-line" />
+              <p className="mb-3 text-sm font-bold">Nomor penawaran</p>
+              <NumberingEditor kind="quoteNumbering" s={s} settings={settings} onChange={(r) => patch({ quoteNumbering: r })} />
             </Section>
           </>
         )}
@@ -251,6 +286,9 @@ export function SettingsPage() {
                   { value: 'dark', label: 'Gelap' },
                 ]}
               />
+              <div className="mt-4">
+                <InstallApp />
+              </div>
             </Section>
 
             <BackupSection />
@@ -349,7 +387,7 @@ function DefaultsSection({ s, def }: { s: Editable; def: <K extends keyof Settin
   );
 }
 
-function NumberingEditor({ kind, s, settings, onChange }: { kind: 'numbering' | 'receiptNumbering'; s: Editable; settings: Settings; onChange: (r: Omit<NumberingRule, 'counters'>) => void }) {
+function NumberingEditor({ kind, s, settings, onChange }: { kind: 'numbering' | 'receiptNumbering' | 'quoteNumbering'; s: Editable; settings: Settings; onChange: (r: Omit<NumberingRule, 'counters'>) => void }) {
   const { toast } = useUI();
   const rule = s[kind];
   const today = todayISO();
@@ -452,13 +490,9 @@ function BackupSection() {
   const { toast, confirm } = useUI();
   const settings = useSettings();
   const counts = useLiveQuery(async () => ({ invoices: await db.invoices.count(), clients: await db.clients.count(), templates: await db.templates.count() }), []);
-  const [persisted, setPersisted] = useState<boolean | null>(null);
+  const storage = useStorageHealth();
   const [pending, setPending] = useState<Awaited<ReturnType<typeof readBackup>> | null>(null);
   const fileId = useId();
-
-  useEffect(() => {
-    navigator.storage?.persisted?.().then(setPersisted).catch(() => setPersisted(null));
-  }, []);
 
   const doImport = async (mode: ImportMode) => {
     if (!pending) return;
@@ -468,6 +502,7 @@ function BackupSection() {
     }
     try {
       await importBackup(pending, mode);
+      storage.refresh();
       toast(`Backup dipulihkan: ${pending.invoices.length} invoice, ${pending.clients.length} klien`);
       setPending(null);
       if (mode === 'replace') setTimeout(() => location.reload(), 600);
@@ -493,6 +528,7 @@ function BackupSection() {
               const res = await shareOrDownload(f);
               if (res === 'cancelled') return;
               await markBackedUp();
+              storage.refresh();
               toast(res === 'shared' ? 'File backup dibagikan' : 'File backup diunduh');
             } catch (e) {
               toast(`Backup gagal: ${(e as Error).message}`, 'error');
@@ -521,10 +557,44 @@ function BackupSection() {
           />
         </label>
       </div>
-      {persisted === false && (
-        <p className="mt-3 text-xs text-muted">Browser belum menjamin data ini tidak dihapus otomatis saat memori penuh. Pasang aplikasi ke layar utama agar lebih aman, dan tetap rutin backup.</p>
-      )}
-
+      <div className="mt-3 rounded-xl border border-line p-3">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="font-semibold">Penyimpanan perangkat</span>
+          <span className="num text-muted">
+            {storage.loading ? 'Memeriksa...' : storage.quota > 0 ? `${formatBytes(storage.usage)} dari ${formatBytes(storage.quota)}` : 'Tidak tersedia'}
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken">
+          <div
+            className={`h-full rounded-full ${storage.percent > 75 ? 'bg-danger' : storage.percent > 50 ? 'bg-warn' : 'bg-ok'}`}
+            style={{ width: `${Math.min(100, Math.max(2, storage.percent))}%` }}
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+          <span>
+            {storage.persisted === true
+              ? 'Data dilindungi dari pembersihan otomatis browser.'
+              : storage.persisted === false
+                ? 'Browser belum menjamin data ini tidak dihapus saat penyimpanan penuh.'
+                : 'Status perlindungan data tidak tersedia di browser ini.'}
+          </span>
+          {storage.persisted !== true && (
+            <Button
+              size="sm"
+              onClick={async () => {
+                const ok = await requestPersistentStorage();
+                toast(ok ? 'Penyimpanan permanen aktif' : 'Browser menolak permintaan penyimpanan permanen', ok ? 'ok' : 'error');
+                storage.refresh();
+              }}
+            >
+              Minta penyimpanan permanen
+            </Button>
+          )}
+        </div>
+        {storage.percent > 75 && (
+          <p className="mt-2 text-xs font-semibold text-warn">Penyimpanan hampir penuh. Unduh backup lalu hapus invoice lama atau gambar yang tidak dipakai.</p>
+        )}
+      </div>
       <Sheet open={!!pending} onClose={() => setPending(null)} title="Pulihkan backup">
         {pending && (
           <div className="flex flex-col gap-3 text-sm">
@@ -546,4 +616,16 @@ function BackupSection() {
       </Sheet>
     </Section>
   );
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return '0 MB';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }

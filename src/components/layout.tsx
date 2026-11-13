@@ -3,13 +3,23 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import type { Status } from '../types';
 import { createInvoice, updateSettings } from '../db';
 import { useSettings } from '../hooks';
-import { IconBack, IconChart, IconDoc, IconGear, IconLayout, IconMoon, IconPeople, IconPlus, IconSidebar, IconSun } from './icons';
+import { IconBack, IconBell, IconChart, IconDoc, IconGear, IconLayout, IconMoon, IconPeople, IconPlus, IconQuotation, IconRepeat, IconSidebar, IconSun } from './icons';
 
 const NAV = [
   { to: '/', label: 'Invoice', icon: IconDoc, end: true },
+  { to: '/tagih', label: 'Penagihan', icon: IconBell },
   { to: '/klien', label: 'Klien', icon: IconPeople },
   { to: '/laporan', label: 'Laporan', icon: IconChart },
+  { to: '/berulang', label: 'Berulang', icon: IconRepeat },
   { to: '/template', label: 'Template', icon: IconLayout },
+  { to: '/pengaturan', label: 'Pengaturan', icon: IconGear },
+];
+
+const NAV_MOBILE = [
+  { to: '/', label: 'Invoice', icon: IconDoc, end: true },
+  { to: '/tagih', label: 'Penagihan', icon: IconBell },
+  { to: '/klien', label: 'Klien', icon: IconPeople },
+  { to: '/laporan', label: 'Laporan', icon: IconChart },
   { to: '/pengaturan', label: 'Pengaturan', icon: IconGear },
 ];
 
@@ -59,6 +69,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     setCreating(true);
     try {
       const inv = await createInvoice();
+      navigate(`/invoice/${inv.id}/edit`, { state: { fresh: true } });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleNewQuote = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const inv = await createInvoice({ kind: 'quote' });
       navigate(`/invoice/${inv.id}/edit`, { state: { fresh: true } });
     } finally {
       setCreating(false);
@@ -131,10 +152,22 @@ export function AppShell({ children }: { children: ReactNode }) {
             <IconPlus size={18} />
             {!collapsed && <span>Invoice Baru</span>}
           </button>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={handleNewQuote}
+              disabled={creating}
+              title="Buat Penawaran Baru"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-sunken disabled:opacity-50"
+            >
+              <IconQuotation size={16} />
+              <span>Penawaran Baru</span>
+            </button>
+          )}
         </div>
 
         {/* Navigation Items */}
-        <nav aria-label="Navigasi utama desktop" className={`flex-1 flex flex-col gap-1.5 ${collapsed ? 'px-2 py-2' : 'px-3 py-2'}`}>
+        <nav aria-label="Navigasi utama desktop" className={`custom-scrollbar flex-1 flex flex-col gap-1.5 overflow-y-auto ${collapsed ? 'px-2 py-2' : 'px-3 py-2'}`}>
           {NAV.map((n) => (
             <NavLink
               key={n.to}
@@ -223,7 +256,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Mobile Bottom Navigation */}
       <nav aria-label="Navigasi utama mobile" className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur-md md:hidden">
         <div className="grid grid-cols-5">
-          {NAV.map((n) => (
+          {NAV_MOBILE.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
@@ -280,6 +313,9 @@ export const STATUS_META: Record<Status, { label: string; cls: string }> = {
   paid: { label: 'Lunas', cls: 'stamp-paid' },
   overdue: { label: 'Lewat tempo', cls: 'stamp-overdue' },
   void: { label: 'Batal', cls: 'stamp-void' },
+  accepted: { label: 'Diterima', cls: 'stamp-accepted' },
+  rejected: { label: 'Ditolak', cls: 'stamp-rejected' },
+  expired: { label: 'Kedaluwarsa', cls: 'stamp-expired' },
 };
 
 export function StatusStamp({ status }: { status: Status }) {

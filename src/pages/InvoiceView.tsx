@@ -1,36 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { createRevision, createSettlement, db, deleteInvoice, deriveStatus, duplicateInvoice, getTemplate, reserveReceiptNumber } from '../db';
+import { convertQuoteToInvoice, createRevision, createSettlement, db, decideQuote, deleteInvoice, deriveStatus, duplicateInvoice, getTemplate, reserveReceiptNumber } from '../db';
 import { useInvoicePdf, useSettings } from '../hooks';
 import { computeTotals, displayDecimals, formatMoney } from '../lib/money';
 import { addDays } from '../lib/id';
 import { formatDate } from '../lib/labels';
-import { copyText, downloadFile, safeFileName, shareOrDownload } from '../lib/files';
+import { copyText, downloadFile, printPdf, safeFileName, shareOrDownload } from '../lib/files';
+import { buildMessage, waNumber } from '../lib/share';
 import { todayISO, uid } from '../lib/id';
 import type { Invoice, Payment, Settings, TemplateConfig } from '../types';
 import { PageHeader, StatusStamp } from '../components/layout';
 import { Button, Card, EmptyState, Field, IconButton, Loading, NumberInput, Sheet, TextInput, useUI } from '../components/ui';
-import { IconCopy, IconDownload, IconEdit, IconMore, IconReceipt, IconShare, IconTrash, IconWallet } from '../components/icons';
+import { IconCheck, IconCopy, IconDownload, IconEdit, IconMore, IconPrinter, IconReceipt, IconShare, IconTrash, IconWallet } from '../components/icons';
 import { PdfPreview } from '../components/PdfPreview';
-
-export function buildMessage(tpl: string, inv: Invoice, s: Settings) {
-  const t = computeTotals(inv);
-  return tpl
-    .replace(/\{klien\}/g, inv.client.contactPerson || inv.client.name || '')
-    .replace(/\{nomor\}/g, inv.number)
-    .replace(/\{total\}/g, formatMoney(t.balance > 0 ? t.balance : t.grandTotal, inv.currency, inv.lang))
-    .replace(/\{jatuh_tempo\}/g, inv.dueDate ? formatDate(inv.dueDate, inv.lang) : '-')
-    .replace(/\{usaha\}/g, s.business.name);
-}
-
-export function waNumber(phone: string) {
-  let digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('00')) digits = digits.slice(2);
-  if (digits.startsWith('0')) return '62' + digits.slice(1);
-  if (digits.startsWith('8')) return '62' + digits;
-  return digits;
-}
+import { RecurrenceSheet } from './Recurring';
 
 export function InvoiceView() {
   const { id } = useParams();
@@ -41,6 +25,7 @@ export function InvoiceView() {
   const [tpl, setTpl] = useState<TemplateConfig>();
   const [payOpen, setPayOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [recurOpen, setRecurOpen] = useState(false);
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
@@ -65,8 +50,9 @@ export function InvoiceView() {
     );
 
   const t = computeTotals(inv);
+  const isQuote = inv.kind === 'quote';
   const fileName = `${safeFileName(inv.number)}${inv.client.name ? '_' + safeFileName(inv.client.name) : ''}.pdf`;
-  const reminder = status === 'overdue' || ((status === 'sent' || status === 'partial') && !!inv.dueDate && inv.dueDate <= addDays(todayISO(), 3));
+  const reminder = !isQuote && (status === 'overdue' || ((status === 'sent' || status === 'partial') && !!inv.dueDate && inv.dueDate <= addDays(todayISO(), 3)));
   const message = buildMessage(reminder ? settings.reminderMessage : settings.shareMessage, inv, settings);
   const waLabel = reminder ? 'Kirim pengingat WA' : 'Kirim Chat WA';
 
@@ -88,6 +74,16 @@ export function InvoiceView() {
     if (!pdf.blob) return;
     downloadFile(new File([pdf.blob], fileName, { type: 'application/pdf' }));
     offerMarkSent('PDF diunduh');
+  };
+
+  const print = async () => {
+    if (!pdf.blob) return;
+    try {
+      await printPdf(pdf.blob);
+      offerMarkSent('Dokumen siap dicetak');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
   };
 
   const share = async () => {
@@ -119,6 +115,17 @@ export function InvoiceView() {
     }
   };
 
+  const convert = async () => {
+    const invoice = await convertQuoteToInvoice(inv);
+    toast('Invoice dibuat dari penawaran');
+    navigate(`/invoice/${invoice.id}/edit`, { state: { fresh: true } });
+  };
+
+  const decide = async (state: 'accepted' | 'rejected') => {
+    await decideQuote(inv.id, state);
+    toast(state === 'accepted' ? 'Penawaran ditandai diterima' : 'Penawaran ditandai ditolak');
+  };
+
   const voided = inv.status === 'void';
 
   return (
@@ -138,6 +145,11 @@ export function InvoiceView() {
           <div className="flex items-center gap-2">
             {!voided && (
               <>
+                {isQuote && !inv.convertedTo && (
+                  <Button variant="clay" onClick={() => doAction(convert)} disabled={working} className="shadow-xs">
+                    <IconCheck size={16} /> Jadikan Invoice
+                  </Button>
+                )}
                 <Button
                   variant="primary"
                   onClick={share}
@@ -155,11 +167,15 @@ export function InvoiceView() {
                   <IconDownload size={16} /> Unduh
                 </Button>
 
+                <Button onClick={print} disabled={!pdf.blob} className="hidden sm:inline-flex">
+                  <IconPrinter size={16} /> Cetak
+                </Button>
+
                 <Button onClick={() => navigate(`/invoice/${inv.id}/edit`)} className="hidden sm:inline-flex">
                   <IconEdit size={16} /> Edit
                 </Button>
 
-                {t.balance > 0 && (
+                {!isQuote && t.balance > 0 && (
                   <Button variant="clay" onClick={() => setPayOpen(true)} className="shadow-xs">
                     <IconWallet size={16} /> Catat Bayar
                   </Button>
@@ -187,7 +203,7 @@ export function InvoiceView() {
           <Card>
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-                {t.paid > 0 && t.balance > 0 ? 'Sisa Tagihan' : 'Total Tagihan'}
+                {isQuote ? 'Total Penawaran' : t.paid > 0 && t.balance > 0 ? 'Sisa Tagihan' : 'Total Tagihan'}
               </p>
               <StatusStamp status={status} />
             </div>
@@ -207,11 +223,16 @@ export function InvoiceView() {
               {inv.dueDate && (
                 <>
                   <span>·</span>
-                  <span>Tempo: <strong className="text-text">{formatDate(inv.dueDate, 'id', 'short')}</strong></span>
+                  <span>{isQuote ? 'Berlaku sampai' : 'Tempo'}: <strong className="text-text">{formatDate(inv.dueDate, 'id', 'short')}</strong></span>
                 </>
               )}
             </div>
 
+            {inv.convertedTo && (
+              <Link to={`/invoice/${inv.convertedTo}`} className="mt-3 block text-sm font-semibold text-ok hover:underline">
+                Invoice dari penawaran ini →
+              </Link>
+            )}
             {inv.supersededBy && (
               <Link to={`/invoice/${inv.supersededBy}`} className="mt-3 block text-sm font-semibold text-clay hover:underline">
                 Invoice ini sudah direvisi. Buka versi terbaru →
@@ -226,6 +247,11 @@ export function InvoiceView() {
             {/* Mobile Actions Grid */}
             {!voided && (
               <div className="mt-4 grid grid-cols-2 gap-2 sm:hidden">
+                {isQuote && !inv.convertedTo && (
+                  <Button variant="clay" size="lg" className="col-span-2" onClick={() => doAction(convert)} disabled={working}>
+                    <IconCheck size={18} /> Jadikan Invoice
+                  </Button>
+                )}
                 <Button variant="primary" size="lg" className="col-span-2" onClick={share} disabled={!pdf.blob || working}>
                   <IconShare size={18} /> Bagikan PDF
                 </Button>
@@ -234,6 +260,9 @@ export function InvoiceView() {
                 </Button>
                 <Button onClick={() => navigate(`/invoice/${inv.id}/edit`)}>
                   <IconEdit size={18} /> Edit
+                </Button>
+                <Button onClick={print} disabled={!pdf.blob} className="col-span-2">
+                  <IconPrinter size={18} /> Cetak
                 </Button>
                 {inv.client.phone ? (
                   <a
@@ -299,17 +328,49 @@ export function InvoiceView() {
             </Card>
           )}
 
-          <PaymentsCard inv={inv} settings={settings} tpl={tpl} />
+          {!isQuote && <PaymentsCard inv={inv} settings={settings} tpl={tpl} />}
         </div>
       </div>
 
-      <RecordPaymentSheet open={payOpen} onClose={() => setPayOpen(false)} inv={inv} />
+      {!isQuote && <RecordPaymentSheet open={payOpen} onClose={() => setPayOpen(false)} inv={inv} />}
+      <RecurrenceSheet open={recurOpen} onClose={() => setRecurOpen(false)} invoice={inv} />
 
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Aksi lain">
 
         <div className="flex flex-col gap-1">
+          {isQuote && !voided && (
+            <>
+              {!inv.convertedTo && (
+                <MenuItem
+                  label="Jadikan invoice"
+                  hint="Buat invoice baru dari penawaran ini"
+                  onClick={() => doAction(convert)}
+                />
+              )}
+              <MenuItem
+                label="Tandai diterima"
+                hint="Penawaran disetujui klien"
+                onClick={() => doAction(() => decide('accepted'))}
+              />
+              <MenuItem
+                label="Tandai ditolak"
+                hint="Penawaran tidak dilanjutkan"
+                onClick={() => doAction(() => decide('rejected'))}
+              />
+            </>
+          )}
+          {!voided && !isQuote && (
+            <MenuItem
+              label="Jadikan invoice berulang"
+              hint="Buat draft otomatis tiap bulan dari invoice ini"
+              onClick={() => {
+                setMoreOpen(false);
+                setRecurOpen(true);
+              }}
+            />
+          )}
           <MenuItem
-            label="Duplikat jadi invoice baru"
+            label={isQuote ? 'Duplikat penawaran' : 'Duplikat jadi invoice baru'}
             hint="Untuk klien langganan atau tagihan bulanan"
             onClick={() =>
               doAction(async () => {
@@ -330,7 +391,7 @@ export function InvoiceView() {
               }
             />
           )}
-          {!voided && (
+          {!voided && !isQuote && (
             <MenuItem
               label="Buat invoice pelunasan"
               hint={t.paid > 0 ? `Otomatis dikurangi ${formatMoney(t.paid, inv.currency)} yang sudah dibayar` : 'Otomatis dikurangi nilai invoice ini sebagai DP'}
@@ -345,7 +406,7 @@ export function InvoiceView() {
           )}
           {!voided && (
             <MenuItem
-              label="Batalkan invoice"
+              label={isQuote ? 'Batalkan penawaran' : 'Batalkan invoice'}
               hint="Tetap tersimpan dengan cap BATAL"
               onClick={() =>
                 doAction(async () => {
@@ -426,6 +487,7 @@ function PaymentsCard({ inv, settings, tpl }: { inv: Invoice; settings: Settings
                 {p.method ? ` · ${p.method}` : ''}
                 {p.receiptNumber ? ` · ${p.receiptNumber}` : ''}
               </p>
+              {p.note && <p className="truncate text-xs text-muted italic">{p.note}</p>}
             </div>
             <Button size="sm" onClick={() => receipt(p)} disabled={busy === p.id || !tpl}>
               <IconReceipt size={16} /> {busy === p.id ? 'Membuat...' : 'Kwitansi'}
@@ -456,6 +518,14 @@ function PaymentsCard({ inv, settings, tpl }: { inv: Invoice; settings: Settings
           </Button>
           <Button
             onClick={() => {
+              if (!ready) return;
+              printPdf(ready).catch((e) => toast((e as Error).message, 'error'));
+            }}
+          >
+            <IconPrinter size={18} /> Cetak
+          </Button>
+          <Button
+            onClick={() => {
               if (ready) downloadFile(ready);
               setReady(null);
             }}
@@ -474,6 +544,7 @@ function RecordPaymentSheet({ open, onClose, inv }: { open: boolean; onClose: ()
   const [amount, setAmount] = useState(0);
   const [date, setDate] = useState(todayISO());
   const [method, setMethod] = useState('Transfer bank');
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const dec = displayDecimals(inv.currency);
   const today = todayISO();
@@ -483,6 +554,7 @@ function RecordPaymentSheet({ open, onClose, inv }: { open: boolean; onClose: ()
     if (open) {
       setAmount(Math.max(t.balance, 0));
       setDate(todayISO());
+      setNote('');
       setSaving(false);
     }
   }, [open]);
@@ -491,7 +563,7 @@ function RecordPaymentSheet({ open, onClose, inv }: { open: boolean; onClose: ()
     if (saving) return;
     setSaving(true);
     try {
-      const p: Payment = { id: uid(), date, amount, method, note: '' };
+      const p: Payment = { id: uid(), date, amount, method, note: note.trim() };
       await db.transaction('rw', db.invoices, async () => {
         const cur = await db.invoices.get(inv.id);
         if (!cur) throw new Error('Invoice sudah dihapus.');
@@ -554,6 +626,9 @@ function RecordPaymentSheet({ open, onClose, inv }: { open: boolean; onClose: ()
             <option value="Tunai" />
             <option value="E-wallet" />
           </datalist>
+        </Field>
+        <Field label="Catatan" htmlFor="pnote" hint="Opsional, ikut tercetak di kwitansi">
+          <TextInput id="pnote" value={note} placeholder="Mis. pembayaran termin 1" onChange={(e) => setNote(e.target.value)} />
         </Field>
       </div>
     </Sheet>

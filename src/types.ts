@@ -58,6 +58,7 @@ export interface Settings {
   };
   numbering: NumberingRule;
   receiptNumbering: NumberingRule;
+  quoteNumbering: NumberingRule;
   shareMessage: string;
   reminderMessage: string;
   theme: ThemePref;
@@ -116,11 +117,13 @@ export interface Payment {
 }
 
 export type StoredStatus = 'draft' | 'sent' | 'void';
-export type Status = 'draft' | 'sent' | 'partial' | 'paid' | 'overdue' | 'void';
+export type Status = 'draft' | 'sent' | 'partial' | 'paid' | 'overdue' | 'void' | 'accepted' | 'rejected' | 'expired';
+export type DocKind = 'invoice' | 'quote';
 
 export interface Invoice {
   id: string;
   number: string;
+  kind?: DocKind;
   numberKey?: string;
   numberSeq?: number;
   numberAuto?: boolean;
@@ -147,6 +150,50 @@ export interface Invoice {
   revisionOf?: string;
   supersededBy?: string;
   sentAt?: number;
+  quoteState?: 'open' | 'accepted' | 'rejected';
+  quoteDecidedAt?: number;
+  convertedTo?: string;
+  lastRemindedAt?: number;
+  remindCount?: number;
+  snoozeUntil?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type Frequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface RecurringTemplate {
+  kind?: DocKind;
+  title: string;
+  clientId?: string;
+  client: ClientSnapshot;
+  items: LineItem[];
+  discount: Discount;
+  tax: { enabled: boolean; label: string; rate: number; inclusive: boolean };
+  pph: { enabled: boolean; label: string; rate: number };
+  adjustments: Adjustment[];
+  currency: string;
+  lang: Lang;
+  templateId: string;
+  notes: string;
+  terms: string;
+  bankAccountIds: string[];
+  showQris: boolean;
+}
+
+export interface Recurrence {
+  id: string;
+  name: string;
+  active: boolean;
+  frequency: Frequency;
+  interval: number;
+  startDate: string;
+  endDate?: string;
+  nextRun: string;
+  dueDays: number;
+  lastRun?: string;
+  runCount: number;
+  template: RecurringTemplate;
   createdAt: number;
   updatedAt: number;
 }

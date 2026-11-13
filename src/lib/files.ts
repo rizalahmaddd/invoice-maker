@@ -49,6 +49,49 @@ export async function shareOrDownload(file: File, text?: string): Promise<ShareR
   return 'downloaded';
 }
 
+// iOS Safari refuses to print a PDF inside an iframe, so there we hand the file to the system viewer instead.
+export async function printPdf(blob: Blob): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  if (ios) {
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const frame = document.createElement('iframe');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '0';
+    frame.style.height = '0';
+    frame.style.border = '0';
+    const cleanup = () => {
+      frame.remove();
+      URL.revokeObjectURL(url);
+    };
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        resolve();
+      } catch (e) {
+        cleanup();
+        reject(e as Error);
+        return;
+      }
+      // The print dialog blocks some browsers, so the frame can only be removed once the user is done.
+      setTimeout(cleanup, 60_000);
+    };
+    frame.onerror = () => {
+      cleanup();
+      reject(new Error('PDF tidak bisa dibuka untuk dicetak.'));
+    };
+    frame.src = url;
+    document.body.appendChild(frame);
+  });
+}
+
 export function safeFileName(s: string): string {
   return s.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '_').slice(0, 120);
 }

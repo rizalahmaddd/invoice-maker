@@ -78,6 +78,15 @@ export function Clients() {
     navigate(`/invoice/${inv.id}/edit`, { state: { fresh: true } });
   };
 
+  const quoteFor = async (c: Client) => {
+    const inv = await createInvoice({
+      kind: 'quote',
+      clientId: c.id,
+      client: { name: c.name, contactPerson: c.contactPerson, email: c.email, phone: c.phone, address: c.address, taxId: c.taxId },
+    });
+    navigate(`/invoice/${inv.id}/edit`, { state: { fresh: true } });
+  };
+
   const repeatLast = async (last: Invoice) => {
     const inv = await duplicateInvoice(last);
     toast(`Disalin dari ${last.number}. Cek tanggal dan item sebelum dikirim.`);
@@ -171,6 +180,9 @@ export function Clients() {
                             Ulangi terakhir
                           </Button>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => quoteFor(c)}>
+                          Penawaran
+                        </Button>
                         <Button size="sm" onClick={() => invoiceFor(c)}>
                           <IconPlus size={15} /> Buat Invoice
                         </Button>

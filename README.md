@@ -15,7 +15,7 @@
 
 **Stack:** TypeScript · React 18 · Vite · Tailwind CSS 4 · [Dexie](https://dexie.org) (IndexedDB) · [@react-pdf/renderer](https://react-pdf.org) · [PDF.js](https://mozilla.github.io/pdf.js/) · Fontsource · Workbox (PWA) · Cloudflare Workers
 
-Aplikasi pembuat invoice dan kwitansi untuk freelancer, UMKM, dan usaha jasa di Indonesia. Hitung PPN dan potongan PPh 23, tulis terbilang otomatis, cetak PDF dengan 24 template siap pakai, lalu kirim langsung lewat WhatsApp. Semua data tersimpan di perangkat Anda, tanpa akun dan tanpa server. Bisa dipasang sebagai aplikasi (PWA) dan tetap jalan offline.
+Aplikasi pembuat invoice dan kwitansi untuk freelancer, UMKM, dan usaha jasa di Indonesia. Hitung PPN dan potongan PPh 23, tulis terbilang otomatis, cetak PDF dengan 24 template siap pakai, lalu kirim langsung lewat WhatsApp. Lengkap dengan penawaran harga, pusat penagihan, invoice berulang, dan laporan bergrafik. Semua data tersimpan di perangkat Anda, tanpa akun dan tanpa server. Bisa dipasang sebagai aplikasi (PWA) dan tetap jalan offline.
 
 🌐 **Coba demo:** [invoice.solusikoding.com](https://invoice.solusikoding.com)
 
@@ -31,12 +31,15 @@ Aplikasi pembuat invoice dan kwitansi untuk freelancer, UMKM, dan usaha jasa di 
 - **Revisi yang tertib**: Invoice terkirim dikunci; perubahan dibuat sebagai revisi bernomor `-R1` dan versi lama ditandai batal
 - **Multi mata uang & dwibahasa**: IDR, USD, SGD, MYR, EUR, AUD, JPY dengan dokumen Bahasa Indonesia atau Inggris
 - **Validasi sebelum simpan**: Peringatan untuk klien kosong, nomor ganda, total nol, atau jatuh tempo yang keliru
+- **Penawaran → invoice**: Buat penawaran harga dengan nomor `QUO/...` sendiri, tandai diterima/ditolak, lalu jadikan invoice sekali klik
+- **Invoice berulang**: Jadwalkan draft otomatis tiap minggu, bulan, 3 bulan, atau tahun dari invoice yang sudah ada
 
 ### Kirim & tagih
-- **PDF siap kirim**: Bagikan langsung ke WhatsApp, email, atau aplikasi lain dari HP, atau unduh di desktop
+- **PDF siap kirim**: Bagikan langsung ke WhatsApp, email, atau aplikasi lain dari HP, atau unduh/cetak di desktop
 - **Pesan otomatis**: Template pesan dengan nama klien, nomor, total, dan jatuh tempo; berganti jadi pesan pengingat saat invoice hampir atau sudah lewat tempo
-- **Status jelas**: Draft, terkirim, dibayar sebagian, lunas, lewat tempo, dan batal
-- **Catat pembayaran**: Pembayaran penuh atau cicilan, lalu cetak **kwitansi** bernomor dengan terbilang
+- **Status jelas**: Draft, terkirim, dibayar sebagian, lunas, lewat tempo, batal, plus status penawaran (diterima, ditolak, kedaluwarsa)
+- **Pusat penagihan**: Satu layar berisi invoice yang perlu ditindak — lewat tempo, jatuh tempo dekat, lama tidak ditagih, dan draft siap kirim — dengan aksi WhatsApp, tandai ditagih, dan tunda
+- **Catat pembayaran**: Pembayaran penuh atau cicilan beserta catatannya, lalu cetak **kwitansi** bernomor dengan terbilang
 - **Rekening & QRIS**: Tampilkan beberapa rekening bank dan gambar QRIS di invoice
 
 ### Template & desain
@@ -48,15 +51,19 @@ Aplikasi pembuat invoice dan kwitansi untuk freelancer, UMKM, dan usaha jasa di 
 - **Logo, tanda tangan & stempel** dari Pengaturan; latar putih pada foto tanda tangan dan stempel dihapus otomatis
 
 ### Laporan & data
-- **Dashboard piutang**: Belum lunas, lewat tempo, dan sudah lunas, dipisah per mata uang
+- **Dashboard analitik**: Grafik arus kas bulanan, umur piutang (0–30/31–60/61–90/90+), komposisi status, klien teratas, dan rata-rata hari bayar
+- **Rekap pajak**: DPP, PPN keluaran, dan PPh per bulan dengan ekspor CSV untuk pembukuan/SPT
 - **Laporan**: Tagihan dan penerimaan per bulan, piutang per klien, dan ekspor CSV per tahun
 - **Klien langganan**: Lihat semua invoice satu klien dan ulangi invoice terakhirnya dengan sekali ketuk
 - **Backup & pindah perangkat**: Ekspor ke satu file JSON, lalu gabungkan atau ganti data di perangkat lain
+- **Kesehatan penyimpanan**: Lihat pemakaian penyimpanan dan minta perlindungan data permanen dari browser
 
 ### Lainnya
 - **100% di perangkat & privat**: Data invoice dan klien tidak pernah dikirim ke server mana pun
-- **PWA & offline**: Bisa dipasang di HP maupun desktop dan tetap jalan tanpa internet
+- **PWA & offline**: Bisa dipasang di HP maupun desktop dan tetap jalan tanpa internet, lengkap dengan tombol pasang
+- **Tanda tangan digital**: Gambar tanda tangan langsung di layar sentuh, atau unggah foto dengan latar putih otomatis dihapus
 - **Responsif**: Nyaman dipakai di HP, dengan tema terang/gelap
+- **Tahan error**: Layar pemulihan dengan unduh backup darurat jika terjadi kesalahan tak terduga
 
 ## Cara kerja
 
@@ -97,4 +104,4 @@ Dikembangkan oleh **rizalahmaddd**:
 ## Lisensi
 
 Proyek ini dilisensikan di bawah lisensi [MIT License](LICENSE).  
-Font yang dibundel (Plus Jakarta Sans, Inter, IBM Plex Sans, Space Grotesk, Poppins, Montserrat, Outfit, Lora, Playfair Display, Fraunces, DM Serif Display, JetBrains Mono, Space Mono, Arimo, Tinos) memakai SIL Open Font License 1.1, rinciannya ada di [Dokumentasi Teknis](docs/teknis.md#9-lisensi-font).
+Font yang dibundel (Plus Jakarta Sans, Inter, IBM Plex Sans, Space Grotesk, Poppins, Montserrat, Outfit, Lora, Playfair Display, Fraunces, DM Serif Display, JetBrains Mono, Space Mono, Arimo, Tinos) memakai SIL Open Font License 1.1, rinciannya ada di [Dokumentasi Teknis](docs/teknis.md#10-lisensi-font).

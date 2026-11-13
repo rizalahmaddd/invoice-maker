@@ -8,18 +8,29 @@ import { formatDate } from '../lib/labels';
 import { daysBetween, todayISO } from '../lib/id';
 import type { Invoice, Status } from '../types';
 import { PageHeader, StatusStamp } from '../components/layout';
-import { Button, EmptyState, Loading, TextInput, useUI } from '../components/ui';
+import { Button, EmptyState, Loading, Segmented, TextInput, useUI } from '../components/ui';
+import { InstallApp } from '../components/InstallApp';
 import { IconChevronDown, IconDownload, IconEdit, IconGrid, IconPlus, IconSearch, IconTable } from '../components/icons';
 
 type Filter = 'all' | 'unpaid' | Status;
 type SortBy = 'updated' | 'date_desc' | 'amount_desc' | 'due_asc' | 'client_asc';
 
-const FILTERS: { value: Filter; label: string }[] = [
+const INVOICE_FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'Semua' },
   { value: 'unpaid', label: 'Belum lunas' },
   { value: 'overdue', label: 'Lewat tempo' },
   { value: 'draft', label: 'Draft' },
   { value: 'paid', label: 'Lunas' },
+  { value: 'void', label: 'Batal' },
+];
+
+const QUOTE_FILTERS: { value: Filter; label: string }[] = [
+  { value: 'all', label: 'Semua' },
+  { value: 'sent', label: 'Menunggu jawaban' },
+  { value: 'accepted', label: 'Diterima' },
+  { value: 'rejected', label: 'Ditolak' },
+  { value: 'expired', label: 'Kedaluwarsa' },
+  { value: 'draft', label: 'Draft' },
   { value: 'void', label: 'Batal' },
 ];
 
@@ -51,12 +62,19 @@ export function InvoiceList() {
   const settings = useSettings();
   const invoices = useLiveQuery(() => db.invoices.orderBy('updatedAt').reverse().toArray(), []);
   const [filter, setFilter] = useStoredState<Filter>('list_filter', 'all', 'session');
+  const [kind, setKind] = useStoredState<'invoice' | 'quote'>('list_kind', 'invoice', 'session');
   const [sortBy, setSortBy] = useStoredState<SortBy>('list_sort', 'updated', 'session');
   const [q, setQ] = useStoredState('list_q', '', 'session');
   const [savedView, setViewMode] = useStoredState<'table' | 'cards'>('list_view', 'table');
   const viewMode = useWide('(min-width: 768px)') ? savedView : 'cards';
   const [params, setParams] = useSearchParams();
   const clientFilter = params.get('klien');
+
+  useEffect(() => {
+    const jenis = params.get('jenis');
+    if (jenis === 'penawaran') setKind('quote');
+    else if (jenis === 'invoice') setKind('invoice');
+  }, [params, setKind]);
   const clientName = useLiveQuery(async () => (clientFilter ? (await db.clients.get(clientFilter))?.name ?? 'klien terhapus' : ''), [clientFilter]);
   const [creating, setCreating] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -80,9 +98,10 @@ export function InvoiceList() {
   const rows = useMemo(
     () =>
       (invoices ?? [])
+        .filter((inv) => (inv.kind ?? 'invoice') === kind)
         .filter((inv) => !clientFilter || inv.clientId === clientFilter)
         .map((inv) => ({ inv, status: deriveStatus(inv, today), totals: computeTotals(inv) })),
-    [invoices, today, clientFilter],
+    [invoices, today, clientFilter, kind],
   );
 
   const metrics = useMemo(() => {
@@ -127,9 +146,65 @@ export function InvoiceList() {
     };
   }, [rows, settings?.defaults.currency]);
 
+  const quoteMetrics = useMemo(() => {
+    const open: Sums = new Map();
+    const accepted: Sums = new Map();
+    const rejected: Sums = new Map();
+    let openCount = 0;
+    let acceptedCount = 0;
+    let rejectedCount = 0;
+    let draftCount = 0;
+
+    for (const r of rows) {
+      const c = r.inv.currency;
+      if (r.status === 'sent' || r.status === 'expired') {
+        addTo(open, c, r.totals.grandTotal);
+        openCount += 1;
+      } else if (r.status === 'accepted') {
+        addTo(accepted, c, r.totals.grandTotal);
+        acceptedCount += 1;
+      } else if (r.status === 'rejected') {
+        addTo(rejected, c, r.totals.grandTotal);
+        rejectedCount += 1;
+      } else if (r.status === 'draft') {
+        draftCount += 1;
+      }
+    }
+
+    const decided = acceptedCount + rejectedCount;
+    return {
+      open,
+      openCount,
+      accepted,
+      acceptedCount,
+      rejected,
+      rejectedCount,
+      draftCount,
+      conversion: decided > 0 ? Math.round((acceptedCount / decided) * 100) : 0,
+    };
+  }, [rows]);
+
+  const filters = kind === 'quote' ? QUOTE_FILTERS : INVOICE_FILTERS;
+
+  useEffect(() => {
+    if (!filters.some((f) => f.value === filter)) setFilter('all');
+  }, [filters, filter, setFilter]);
+
   // Counts for filter pills
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: rows.length, unpaid: 0, overdue: 0, draft: 0, paid: 0, sent: 0, partial: 0, void: 0 };
+    const c: Record<Filter, number> = {
+      all: rows.length,
+      unpaid: 0,
+      overdue: 0,
+      draft: 0,
+      paid: 0,
+      sent: 0,
+      partial: 0,
+      void: 0,
+      accepted: 0,
+      rejected: 0,
+      expired: 0,
+    };
     for (const r of rows) {
       if (['sent', 'partial', 'overdue'].includes(r.status)) c.unpaid += 1;
       if (r.status in c) c[r.status] += 1;
@@ -176,6 +251,17 @@ export function InvoiceList() {
     }
   };
 
+  const newQuote = async () => {
+    setCreating(true);
+    try {
+      const inv = await createInvoice({ kind: 'quote' });
+      navigate(`/invoice/${inv.id}/edit`, { state: { fresh: true } });
+    } catch (e) {
+      toast(`Gagal membuat penawaran: ${(e as Error).message}`, 'error');
+      setCreating(false);
+    }
+  };
+
   const needsProfile = settings && !settings.business.name;
   const backupDue =
     settings &&
@@ -185,9 +271,29 @@ export function InvoiceList() {
   return (
     <>
       <PageHeader
-        title="Daftar Invoice"
-        sub={`${rows.length} invoice tercatat di perangkat`}
+        title={kind === 'quote' ? 'Daftar Penawaran' : 'Daftar Invoice'}
+        sub={`${rows.length} ${kind === 'quote' ? 'penawaran' : 'invoice'} tercatat di perangkat`}
+        actions={
+          <Button variant="primary" onClick={kind === 'quote' ? newQuote : newInvoice} disabled={creating}>
+            <IconPlus size={18} /> {kind === 'quote' ? 'Penawaran Baru' : 'Invoice Baru'}
+          </Button>
+        }
       />
+
+      <div className="mb-5 sm:max-w-xs">
+        <Segmented
+          label="Jenis dokumen"
+          value={kind}
+          onChange={(v) => {
+            setKind(v);
+            setFilter('all');
+          }}
+          options={[
+            { value: 'invoice', label: 'Invoice' },
+            { value: 'quote', label: 'Penawaran' },
+          ]}
+        />
+      </div>
 
 
       {needsProfile && (
@@ -218,7 +324,7 @@ export function InvoiceList() {
         </div>
       )}
 
-      {rows.length > 0 && (
+      {rows.length > 0 && kind === 'invoice' && (
         <section aria-label="Ringkasan piutang & status" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <KpiCard active={filter === 'unpaid'} onClick={() => setFilter('unpaid')} label="Belum Lunas" stamp="stamp-partial" count={metrics.unpaidCount} hint="Menunggu pembayaran klien">
             <MoneySums sums={metrics.unpaidTotal} primary={metrics.cur} />
@@ -235,6 +341,41 @@ export function InvoiceList() {
             </span>
           </KpiCard>
         </section>
+      )}
+
+      {rows.length > 0 && kind === 'quote' && (
+        <section aria-label="Ringkasan penawaran" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard active={filter === 'sent'} onClick={() => setFilter('sent')} label="Menunggu Jawaban" stamp="stamp-sent" count={quoteMetrics.openCount} hint="Sudah dikirim, belum diputuskan">
+            <MoneySums sums={quoteMetrics.open} primary={metrics.cur} />
+          </KpiCard>
+          <KpiCard active={filter === 'accepted'} onClick={() => setFilter('accepted')} label="Diterima" tone="text-ok" stamp="stamp-accepted" count={quoteMetrics.acceptedCount} hint="Siap dijadikan invoice">
+            <MoneySums sums={quoteMetrics.accepted} primary={metrics.cur} className="text-ok" />
+          </KpiCard>
+          <KpiCard active={filter === 'rejected'} onClick={() => setFilter('rejected')} label="Ditolak" tone="text-danger" stamp="stamp-rejected" count={quoteMetrics.rejectedCount} hint="Tidak dilanjutkan">
+            <MoneySums sums={quoteMetrics.rejected} primary={metrics.cur} className="text-danger" />
+          </KpiCard>
+          <KpiCard active={filter === 'all'} onClick={() => setFilter('all')} label="Semua Penawaran" stamp="stamp-draft" count={rows.length} hint={`${quoteMetrics.draftCount} draft · konversi ${quoteMetrics.conversion}%`}>
+            <span className="num mt-2 block text-xl font-extrabold tracking-tight lg:text-2xl">
+              {rows.length} <span className="text-sm font-medium text-muted">dokumen</span>
+            </span>
+          </KpiCard>
+        </section>
+      )}
+
+      {metrics.overdueCount > 0 && (
+        <Link
+          to="/tagih"
+          className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-danger/30 bg-danger/5 p-3.5 text-sm transition-colors hover:bg-danger/10"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-2 rounded-full bg-danger" />
+            <span>
+              <span className="font-bold">{metrics.overdueCount} invoice lewat tempo</span>{' '}
+              <span className="text-muted">— kirim pengingat dari satu layar.</span>
+            </span>
+          </div>
+          <span className="shrink-0 font-semibold text-danger hover:underline">Tagih sekarang →</span>
+        </Link>
       )}
 
       {backupDue && (
@@ -255,15 +396,25 @@ export function InvoiceList() {
         </Link>
       )}
 
+      {(invoices?.length ?? 0) > 0 && (
+        <div className="mb-5">
+          <InstallApp dismissible />
+        </div>
+      )}
+
       {invoices === undefined ? (
         <Loading />
       ) : invoices.length === 0 ? (
         <EmptyState
-          title="Belum ada invoice yang dibuat"
-          body="Buat invoice pertama kamu dalam hitungan menit. Data klien dan item pekerjaan akan otomatis tersimpan untuk mempercepat pembuatan invoice berikutnya."
+          title={kind === 'quote' ? 'Belum ada penawaran' : 'Belum ada invoice yang dibuat'}
+          body={
+            kind === 'quote'
+              ? 'Buat penawaran harga dulu, kirim ke calon klien, lalu jadikan invoice sekali klik setelah disetujui.'
+              : 'Buat invoice pertama kamu dalam hitungan menit. Data klien dan item pekerjaan akan otomatis tersimpan untuk mempercepat pembuatan invoice berikutnya.'
+          }
           action={
-            <Button variant="primary" size="lg" onClick={newInvoice} disabled={creating}>
-              <IconPlus size={18} /> Buat Invoice Pertama
+            <Button variant="primary" size="lg" onClick={kind === 'quote' ? newQuote : newInvoice} disabled={creating}>
+              <IconPlus size={18} /> {kind === 'quote' ? 'Buat Penawaran Pertama' : 'Buat Invoice Pertama'}
             </Button>
           }
         />
@@ -342,7 +493,7 @@ export function InvoiceList() {
 
           {/* Status Tabs with count badges */}
           <div className="no-scrollbar -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0" role="tablist" aria-label="Filter status">
-            {FILTERS.map((f) => {
+            {filters.map((f) => {
               const active = filter === f.value;
               const count = counts[f.value] ?? 0;
               return (
@@ -372,18 +523,29 @@ export function InvoiceList() {
 
           {visible.length === 0 ? (
             <EmptyState
-              title="Tidak ada invoice yang cocok"
-              body={q ? `Tidak ada hasil pencarian yang cocok dengan kata kunci "${q}".` : 'Belum ada invoice di kategori filter ini.'}
+              title={q ? 'Tidak ada hasil' : kind === 'quote' ? 'Belum ada penawaran di kategori ini' : 'Tidak ada invoice yang cocok'}
+              body={
+                q
+                  ? `Tidak ada hasil pencarian yang cocok dengan kata kunci "${q}".`
+                  : kind === 'quote'
+                    ? 'Coba filter lain atau buat penawaran baru.'
+                    : 'Belum ada invoice di kategori filter ini.'
+              }
               action={
-                <Button
-                  onClick={() => {
-                    setQ('');
-                    setFilter('all');
-                    setParams({});
-                  }}
-                >
-                  Tampilkan Semua Invoice
-                </Button>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button
+                    onClick={() => {
+                      setQ('');
+                      setFilter('all');
+                      setParams({});
+                    }}
+                  >
+                    Tampilkan Semua
+                  </Button>
+                  <Button variant="primary" onClick={kind === 'quote' ? newQuote : newInvoice} disabled={creating}>
+                    <IconPlus size={18} /> {kind === 'quote' ? 'Penawaran Baru' : 'Invoice Baru'}
+                  </Button>
+                </div>
               }
             />
           ) : viewMode === 'table' ? (
@@ -438,11 +600,11 @@ export function InvoiceList() {
       {(invoices?.length ?? 0) > 0 && (
         <button
           type="button"
-          onClick={newInvoice}
+          onClick={kind === 'quote' ? newQuote : newInvoice}
           disabled={creating}
           className="fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 inline-flex min-h-13 items-center gap-2 rounded-full bg-ink px-5 font-bold text-bg shadow-lg transition-transform active:scale-95 md:hidden"
         >
-          <IconPlus size={20} /> Invoice Baru
+          <IconPlus size={20} /> {kind === 'quote' ? 'Penawaran' : 'Invoice Baru'}
         </button>
       )}
     </>
@@ -498,6 +660,7 @@ function InvoiceTableRow({
 }) {
   const navigate = useNavigate();
   const targetUrl = inv.status === 'draft' ? `/invoice/${inv.id}/edit` : `/invoice/${inv.id}`;
+  const isQuote = inv.kind === 'quote';
 
   let dueText = '-';
   let isOverdue = false;
@@ -506,7 +669,7 @@ function InvoiceTableRow({
     isOverdue = true;
   } else if (['sent', 'partial'].includes(status) && inv.dueDate) {
     const d = daysBetween(today, inv.dueDate);
-    dueText = d === 0 ? 'Hari ini' : `${d} hari lagi`;
+    dueText = d === 0 ? (isQuote ? 'Berlaku sampai hari ini' : 'Hari ini') : isQuote ? `Berlaku ${d} hari lagi` : `${d} hari lagi`;
   } else if (inv.dueDate) {
     dueText = formatDate(inv.dueDate, 'id', 'short');
   }
@@ -589,7 +752,9 @@ function InvoiceCardRow({
   if (status === 'overdue') due = `Lewat ${daysBetween(inv.dueDate, today)} hari`;
   else if (['sent', 'partial'].includes(status) && inv.dueDate) {
     const d = daysBetween(today, inv.dueDate);
-    due = d === 0 ? 'Jatuh tempo hari ini' : `Jatuh tempo ${d} hari lagi`;
+    due = inv.kind === 'quote'
+      ? d === 0 ? 'Berlaku sampai hari ini' : `Berlaku ${d} hari lagi`
+      : d === 0 ? 'Jatuh tempo hari ini' : `Jatuh tempo ${d} hari lagi`;
   } else due = formatDate(inv.issueDate, 'id', 'short');
 
   return (

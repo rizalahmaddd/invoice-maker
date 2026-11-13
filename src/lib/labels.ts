@@ -7,6 +7,7 @@ const DOC = {
     number: 'No.',
     issueDate: 'Tanggal',
     dueDate: 'Jatuh tempo',
+    validUntil: 'Berlaku sampai',
     reference: 'Referensi',
     no: 'No',
     description: 'Deskripsi',
@@ -40,6 +41,10 @@ const DOC = {
     receiver: 'Penerima',
     method: 'Metode',
     invoiceRef: 'Invoice',
+    quoteTitle: 'PENAWARAN HARGA',
+    accepted: 'DITERIMA',
+    rejected: 'DITOLAK',
+    expired: 'KEDALUWARSA',
   },
   en: {
     billTo: 'Bill to',
@@ -47,6 +52,7 @@ const DOC = {
     number: 'No.',
     issueDate: 'Date',
     dueDate: 'Due date',
+    validUntil: 'Valid until',
     reference: 'Reference',
     no: '#',
     description: 'Description',
@@ -80,6 +86,10 @@ const DOC = {
     receiver: 'Received by',
     method: 'Method',
     invoiceRef: 'Invoice',
+    quoteTitle: 'QUOTATION',
+    accepted: 'ACCEPTED',
+    rejected: 'REJECTED',
+    expired: 'EXPIRED',
   },
 } as const;
 

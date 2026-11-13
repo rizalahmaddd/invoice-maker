@@ -182,6 +182,24 @@ textarea {
   text-decoration: line-through;
 }
 
+.stamp-accepted {
+  background-color: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+.stamp-rejected {
+  background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.stamp-expired {
+  background-color: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
 .pb-safe {
   padding-bottom: max(0.75rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)));
 }

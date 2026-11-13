@@ -193,3 +193,26 @@ export const IconChart = (p: P) => (
     <path d="M4 20h16M7 16v-5M12 16V6M17 16v-8" />
   </Svg>
 );
+
+export const IconBell = (p: P) => (
+  <Svg {...p}>
+    <path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9" />
+    <path d="M10.3 20a2 2 0 0 0 3.4 0" />
+  </Svg>
+);
+
+export const IconRepeat = (p: P) => (
+  <Svg {...p}>
+    <path d="m17 2 4 4-4 4" />
+    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+    <path d="m7 22-4-4 4-4" />
+    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+  </Svg>
+);
+
+export const IconQuotation = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 12V4h8l10 10-8 8L3 12z" />
+    <circle cx="7.5" cy="8.5" r="1.3" />
+  </Svg>
+);

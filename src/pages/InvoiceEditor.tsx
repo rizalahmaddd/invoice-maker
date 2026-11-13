@@ -155,6 +155,7 @@ export function InvoiceEditor() {
   const totals = computeTotals(inv);
   const dec = displayDecimals(inv.currency);
   const lang = inv.lang;
+  const isQuote = inv.kind === 'quote';
 
   const locked = inv.status !== 'draft';
   const readOnly = locked && !unlocked;
@@ -170,14 +171,14 @@ export function InvoiceEditor() {
       const t = computeTotals(cur);
       const filled = cur.items.filter((i) => i.description.trim() || i.price);
       const issues: string[] = [];
-      if (!cur.number.trim()) issues.push('Nomor invoice masih kosong.');
-      else if (duplicateNumber) issues.push(`Nomor ${cur.number} sudah dipakai invoice lain.`);
+      if (!cur.number.trim()) issues.push(isQuote ? 'Nomor penawaran masih kosong.' : 'Nomor invoice masih kosong.');
+      else if (duplicateNumber) issues.push(`Nomor ${cur.number} sudah dipakai dokumen lain.`);
       if (!cur.client.name.trim()) issues.push('Nama klien belum diisi.');
       if (filled.length === 0) issues.push('Belum ada item yang diisi.');
       else if (t.grandTotal <= 0) issues.push('Total tagihan 0 atau minus.');
       const noName = filled.filter((i) => !i.description.trim()).length;
       if (noName) issues.push(`${noName} item punya harga tapi belum ada deskripsi.`);
-      if (cur.dueDate && cur.dueDate < cur.issueDate) issues.push('Jatuh tempo lebih awal dari tanggal invoice.');
+      if (cur.dueDate && cur.dueDate < cur.issueDate) issues.push(isQuote ? 'Masa berlaku berakhir sebelum tanggal penawaran.' : 'Jatuh tempo lebih awal dari tanggal invoice.');
       if (issues.length) {
         const ok = await confirm({
           title: 'Cek dulu sebelum disimpan',
@@ -274,7 +275,9 @@ export function InvoiceEditor() {
 
         {locked && (
           <div className="mb-4 rounded-2xl border border-warn/50 bg-warn/10 p-4 text-sm">
-            <p className="font-bold">{inv.status === 'void' ? 'Invoice ini sudah dibatalkan.' : 'Invoice ini sudah dikirim ke klien.'}</p>
+            <p className="font-bold">
+              {inv.status === 'void' ? (isQuote ? 'Penawaran ini sudah dibatalkan.' : 'Invoice ini sudah dibatalkan.') : isQuote ? 'Penawaran ini sudah dikirim ke klien.' : 'Invoice ini sudah dikirim ke klien.'}
+            </p>
             <p className="mt-0.5 text-muted">
               {readOnly
                 ? inv.status === 'void'
@@ -305,15 +308,15 @@ export function InvoiceEditor() {
               <ClientSection inv={inv} update={update} setClientName={setClientName} />
             </fieldset>
 
-            <Collapsible disabled={readOnly} defaultOpen={true} title="Detail invoice" summary={`${formatDate(inv.issueDate, 'id', 'short')} · ${inv.currency} · ${templates?.find((t) => t.id === inv.templateId)?.name ?? ''}`}>
+            <Collapsible disabled={readOnly} defaultOpen={true} title={isQuote ? 'Detail penawaran' : 'Detail invoice'} summary={`${formatDate(inv.issueDate, 'id', 'short')} · ${inv.currency} · ${templates?.find((t) => t.id === inv.templateId)?.name ?? ''}`}>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Nomor invoice" htmlFor="num" hint={duplicateNumber ? <span className="font-semibold text-danger">Nomor ini sudah dipakai invoice lain.</span> : undefined}>
+                <Field label={isQuote ? 'Nomor penawaran' : 'Nomor invoice'} htmlFor="num" hint={duplicateNumber ? <span className="font-semibold text-danger">Nomor ini sudah dipakai dokumen lain.</span> : undefined}>
                   <TextInput id="num" className="font-mono" value={inv.number} onChange={(e) => update({ number: e.target.value, numberAuto: false })} />
                 </Field>
                 <Field label="Referensi / No. PO" htmlFor="ref" hint="Opsional, kalau klien minta">
                   <TextInput id="ref" value={inv.reference} onChange={(e) => update({ reference: e.target.value })} />
                 </Field>
-                <Field label="Tanggal invoice" htmlFor="issue">
+                <Field label={isQuote ? 'Tanggal penawaran' : 'Tanggal invoice'} htmlFor="issue">
                   <TextInput
                     id="issue"
                     type="date"
@@ -327,9 +330,9 @@ export function InvoiceEditor() {
                   />
                 </Field>
                 <Field
-                  label="Jatuh tempo"
+                  label={isQuote ? 'Berlaku sampai' : 'Jatuh tempo'}
                   htmlFor="due"
-                  hint={inv.dueDate && inv.dueDate < inv.issueDate ? <span className="font-semibold text-danger">Lebih awal dari tanggal invoice.</span> : undefined}
+                  hint={inv.dueDate && inv.dueDate < inv.issueDate ? <span className="font-semibold text-danger">Lebih awal dari tanggal dokumen.</span> : undefined}
                 >
                   <TextInput id="due" type="date" value={inv.dueDate} min={inv.issueDate} onChange={(e) => update({ dueDate: e.target.value })} />
                   <div className="flex flex-wrap gap-1.5">
@@ -458,9 +461,13 @@ export function InvoiceEditor() {
               </div>
             </Collapsible>
 
-            <Collapsible disabled={readOnly} title="Pembayaran & catatan" summary={`${inv.bankAccountIds.length} rekening${inv.showQris ? ' · QRIS' : ''}`}>
+            <Collapsible
+              disabled={readOnly}
+              title={isQuote ? 'Catatan & syarat' : 'Pembayaran & catatan'}
+              summary={isQuote ? (inv.notes ? 'Ada catatan' : 'Opsional') : `${inv.bankAccountIds.length} rekening${inv.showQris ? ' · QRIS' : ''}`}
+            >
               <div className="flex flex-col gap-4">
-                {settings.bankAccounts.length === 0 && !settings.qris ? (
+                {!isQuote && (settings.bankAccounts.length === 0 && !settings.qris ? (
                   <p className="text-sm text-muted">
                     Belum ada rekening atau QRIS.{' '}
                     <Link to="/pengaturan" className="font-semibold text-clay underline">
@@ -494,7 +501,7 @@ export function InvoiceEditor() {
                       </label>
                     )}
                   </fieldset>
-                )}
+                ))}
                 <Field label="Catatan" htmlFor="notes">
                   <TextArea id="notes" value={inv.notes} placeholder="Contoh: Terima kasih atas kepercayaannya." onChange={(e) => update({ notes: e.target.value })} />
                 </Field>
@@ -509,7 +516,7 @@ export function InvoiceEditor() {
         <div className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur-md px-4 py-3 shadow-lg lg:sticky lg:bottom-4 lg:mt-6 lg:rounded-2xl lg:border lg:shadow-md">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted">Total Tagihan Final</p>
+              <p className="text-xs text-muted">{isQuote ? 'Total Penawaran' : 'Total Tagihan Final'}</p>
               <p className="num truncate text-xl font-mono font-extrabold text-text tracking-tight">
                 {formatMoney(totals.grandTotal, inv.currency, lang)}
               </p>

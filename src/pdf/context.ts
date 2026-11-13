@@ -12,6 +12,7 @@ export interface DocCtx {
   t: Totals;
   L: DocLabels;
   status: Status;
+  isQuote: boolean;
   title: string;
   money: (n: number) => string;
   num: (n: number) => string;
@@ -46,15 +47,18 @@ export function buildCtx(inv: Invoice, rawTpl: TemplateConfig, s: Settings, stat
   const k = Math.min(Math.max(tpl.style.fontScale || 1, 0.8), 1.25);
   const scale = <T extends Record<string, number>>(o: T) => Object.fromEntries(Object.entries(o).map(([key, v]) => [key, Math.round(v * k * 10) / 10])) as T;
   const overrides = Object.fromEntries(Object.entries(tpl.labels[inv.lang] ?? {}).filter(([, v]) => v && v.trim()));
-  const rawTitle = inv.title || tpl.titles[inv.lang];
+  const L: DocLabels = { ...docLabels(inv.lang), ...overrides };
+  const isQuote = inv.kind === 'quote';
+  const rawTitle = inv.title || (isQuote ? L.quoteTitle : tpl.titles[inv.lang]);
   const shownAmount = t.paid > 0 && t.balance > 0 ? t.balance : t.grandTotal;
   return {
     inv,
     tpl,
     s,
     t,
-    L: { ...docLabels(inv.lang), ...overrides },
+    L,
     status,
+    isQuote,
     title: tpl.style.titleCase === 'upper' ? rawTitle.toUpperCase() : rawTitle,
     money: (n) => formatMoney(n, inv.currency, inv.lang),
     num: (n) => formatNumber(n, inv.lang),

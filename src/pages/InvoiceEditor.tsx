@@ -713,230 +713,89 @@ function ItemsSection({ inv, update, knownItems }: { inv: Invoice; update: Updat
         ))}
       </datalist>
 
-      {/* Desktop Spreadsheet Table View */}
-      <div className="hidden md:block">
-        <div className="custom-scrollbar overflow-x-auto rounded-xl border border-line">
-          <table className="w-full min-w-[700px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-line bg-sunken/60 text-[11px] font-bold tracking-wider text-muted uppercase">
-                <th className="w-8 px-2.5 py-2.5 text-center">#</th>
-                <th className="px-3 py-2.5">Deskripsi & Rincian</th>
-                <th className="w-20 px-2.5 py-2.5">Qty</th>
-                <th className="w-20 px-2.5 py-2.5">Satuan</th>
-                <th className="w-36 px-2.5 py-2.5 text-right">Harga</th>
-                <th className="w-40 px-2.5 py-2.5 text-right">Diskon</th>
-                <th className="w-32 px-3 py-2.5 text-right">Jumlah</th>
-                <th className="w-24 px-2 py-2.5 text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line/60">
-              {inv.items.map((item, idx) => {
-                const lt = lineTotals(item, inv.currency);
-                return (
-                  <tr key={item.id} className="group align-top hover:bg-sunken/30 transition-colors">
-                    <td className="px-2.5 py-3 text-center text-xs font-bold text-muted">
-                      {idx + 1}
-                    </td>
-
-                    <td className="px-3 py-2.5">
-                      <TextInput
-                        aria-label={`Deskripsi item ${idx + 1}`}
-                        placeholder="Nama pekerjaan / produk"
-                        list={listId}
-                        value={item.description}
-                        className="text-sm min-h-9 py-1 px-2.5"
-                        onChange={(e) => setDescription(item, e.target.value)}
-                      />
-                      <input
-                        type="text"
-                        aria-label={`Keterangan item ${idx + 1}`}
-                        className="mt-1.5 w-full rounded-lg border border-line/60 bg-surface px-2.5 py-1 text-xs text-text placeholder:text-muted/60 focus:border-clay focus:outline-none"
-                        placeholder="Keterangan opsional..."
-                        value={item.detail}
-                        onChange={(e) => setItem(item.id, { detail: e.target.value })}
-                      />
-                    </td>
-
-                    <td className="px-2.5 py-2.5">
-                      <NumberInput
-                        aria-label={`Qty item ${idx + 1}`}
-                        lang={lang}
-                        value={item.qty}
-                        className="min-h-9"
-                        onChange={(v) => setItem(item.id, { qty: v })}
-                      />
-                    </td>
-
-                    <td className="px-2.5 py-2.5">
-                      <TextInput
-                        aria-label={`Satuan item ${idx + 1}`}
-                        placeholder="pcs / jam"
-                        value={item.unit}
-                        className="min-h-9 py-1 px-2 text-xs"
-                        onChange={(e) => setItem(item.id, { unit: e.target.value })}
-                      />
-                    </td>
-
-                    <td className="px-2.5 py-2.5">
-                      <NumberInput
-                        aria-label={`Harga item ${idx + 1}`}
-                        lang={lang}
-                        decimals={dec}
-                        value={item.price}
-                        className="min-h-9"
-                        onChange={(v) => setItem(item.id, { price: v })}
-                      />
-                    </td>
-
-                    <td className="px-2.5 py-2.5">
-                      <div className="flex items-center gap-1">
-                        <select
-                          aria-label={`Jenis diskon item ${idx + 1}`}
-                          value={item.discount.type}
-                          onChange={(e) => setItem(item.id, { discount: { ...item.discount, type: e.target.value as 'percent' | 'amount' } })}
-                          className="min-h-9 shrink-0 rounded-lg border border-line bg-surface px-1.5 text-xs font-semibold text-text focus:border-clay focus:outline-none"
-                        >
-                          <option value="percent">%</option>
-                          <option value="amount">{inv.currency === 'IDR' ? 'Rp' : inv.currency}</option>
-                        </select>
-                        <NumberInput
-                          aria-label={`Nilai diskon item ${idx + 1}`}
-                          lang={lang}
-                          decimals={item.discount.type === 'percent' ? 2 : dec}
-                          suffix={item.discount.type === 'percent' ? '%' : undefined}
-                          value={item.discount.value}
-                          className="min-h-9 flex-1 text-xs"
-                          onChange={(v) => setItem(item.id, { discount: { ...item.discount, value: v } })}
-                        />
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-3 text-right">
-                      <span className="num font-mono text-sm font-bold text-text">
-                        {formatMoney(lt.net, inv.currency, lang)}
-                      </span>
-                    </td>
-
-                    <td className="px-2 py-2.5 text-center">
-                      <div className="flex items-center justify-center gap-0.5">
-                        <button
-                          type="button"
-                          title="Naikkan urutan"
-                          aria-label={`Naikkan urutan item ${idx + 1}`}
-                          disabled={idx === 0}
-                          onClick={() => move(idx)}
-                          className="inline-grid size-7 place-items-center rounded-md text-muted hover:bg-sunken hover:text-text disabled:opacity-30 transition-colors"
-                        >
-                          <IconUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Duplikat item"
-                          aria-label={`Duplikat item ${idx + 1}`}
-                          onClick={() => duplicate(idx)}
-                          className="inline-grid size-7 place-items-center rounded-md text-muted hover:bg-sunken hover:text-text transition-colors"
-                        >
-                          <IconCopy size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Hapus item"
-                          aria-label={`Hapus item ${idx + 1}`}
-                          disabled={inv.items.length <= 1}
-                          onClick={() => remove(idx)}
-                          className="inline-grid size-7 place-items-center rounded-md text-muted hover:bg-danger/10 hover:text-danger disabled:opacity-30 transition-colors"
-                        >
-                          <IconTrash size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Mobile Card Layout */}
-      <ol className="flex flex-col gap-3 md:hidden">
-        {inv.items.map((item, idx) => {
-          const lt = lineTotals(item, inv.currency);
-          return (
-            <li key={item.id} className="rounded-xl border border-line p-3">
-              <div className="flex items-start gap-2">
-                <span className="mt-3 w-5 shrink-0 text-xs font-bold text-muted">{idx + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <TextInput
-                    aria-label={`Deskripsi item ${idx + 1}`}
-                    placeholder="Nama pekerjaan / produk"
-                    list={listId}
-                    value={item.description}
-                    onChange={(e) => setDescription(item, e.target.value)}
-                  />
-                  <TextArea
-                    aria-label={`Keterangan item ${idx + 1}`}
-                    rows={1}
-                    className="mt-2 min-h-11 text-sm"
-                    placeholder="Keterangan (opsional)"
-                    value={item.detail}
-                    onChange={(e) => setItem(item.id, { detail: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="mt-2 grid grid-cols-[1fr_1fr] gap-2 pl-7 sm:grid-cols-[90px_90px_1fr]">
-                <Field label="Qty">
-                  <NumberInput aria-label={`Qty item ${idx + 1}`} lang={lang} value={item.qty} onChange={(v) => setItem(item.id, { qty: v })} />
-                </Field>
-                <Field label="Satuan">
-                  <TextInput aria-label={`Satuan item ${idx + 1}`} placeholder="jam, pcs" value={item.unit} onChange={(e) => setItem(item.id, { unit: e.target.value })} />
-                </Field>
-                <Field label="Harga satuan" className="col-span-2 sm:col-span-1">
-                  <NumberInput aria-label={`Harga item ${idx + 1}`} lang={lang} decimals={dec} value={item.price} onChange={(v) => setItem(item.id, { price: v })} />
-                </Field>
-              </div>
-              <details className="mt-2 pl-7" open={item.discount.value > 0}>
-                <summary className="min-h-9 cursor-pointer py-2 text-xs font-semibold text-muted">Diskon item</summary>
-                <div className="flex gap-2">
-                  <div className="w-28 shrink-0">
-                    <Select
-                      aria-label="Jenis diskon item"
-                      value={item.discount.type}
-                      onChange={(e) => setItem(item.id, { discount: { ...item.discount, type: e.target.value as 'percent' | 'amount' } })}
-                    >
-                      <option value="percent">Persen</option>
-                      <option value="amount">Nominal</option>
-                    </Select>
+      {/* The field grid follows this container's width, not the viewport: the
+          editor shares the screen with the PDF preview, so the form column is
+          much narrower than the screen on desktop. */}
+      <div className="@container">
+        <ol className="flex flex-col gap-4">
+          {inv.items.map((item, idx) => {
+            const lt = lineTotals(item, inv.currency);
+            return (
+              <li key={item.id} className="rounded-xl border border-line p-4">
+                <div className="flex items-start gap-2">
+                  <span className="mt-3 w-5 shrink-0 text-xs font-bold text-muted">{idx + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <TextInput
+                      aria-label={`Deskripsi item ${idx + 1}`}
+                      placeholder="Nama pekerjaan / produk"
+                      list={listId}
+                      value={item.description}
+                      onChange={(e) => setDescription(item, e.target.value)}
+                    />
+                    <TextArea
+                      aria-label={`Keterangan item ${idx + 1}`}
+                      rows={1}
+                      className="mt-2 min-h-11 text-sm"
+                      placeholder="Keterangan (opsional)"
+                      value={item.detail}
+                      onChange={(e) => setItem(item.id, { detail: e.target.value })}
+                    />
                   </div>
-                  <NumberInput
-                    aria-label="Nilai diskon item"
-                    className="flex-1"
-                    lang={lang}
-                    decimals={item.discount.type === 'percent' ? 2 : dec}
-                    suffix={item.discount.type === 'percent' ? '%' : undefined}
-                    value={item.discount.value}
-                    onChange={(v) => setItem(item.id, { discount: { ...item.discount, value: v } })}
-                  />
                 </div>
-              </details>
-              <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2 pl-7">
-                <div className="flex">
-                  <IconButton label="Naikkan urutan" disabled={idx === 0} onClick={() => move(idx)}>
-                    <IconUp size={18} />
-                  </IconButton>
-                  <IconButton label="Duplikat item" onClick={() => duplicate(idx)}>
-                    <IconCopy size={18} />
-                  </IconButton>
-                  <IconButton label="Hapus item" disabled={inv.items.length <= 1} onClick={() => remove(idx)}>
-                    <IconTrash size={18} />
-                  </IconButton>
+                <div className="mt-3 grid grid-cols-[1fr_1fr] gap-3 pl-7 @md:grid-cols-[90px_90px_1fr]">
+                  <Field label="Qty">
+                    <NumberInput aria-label={`Qty item ${idx + 1}`} lang={lang} value={item.qty} onChange={(v) => setItem(item.id, { qty: v })} />
+                  </Field>
+                  <Field label="Satuan">
+                    <TextInput aria-label={`Satuan item ${idx + 1}`} placeholder="jam, pcs" value={item.unit} onChange={(e) => setItem(item.id, { unit: e.target.value })} />
+                  </Field>
+                  <Field label="Harga satuan" className="col-span-2 @md:col-span-1">
+                    <NumberInput aria-label={`Harga item ${idx + 1}`} lang={lang} decimals={dec} value={item.price} onChange={(v) => setItem(item.id, { price: v })} />
+                  </Field>
                 </div>
-                <p className="num text-right font-bold">{formatMoney(lt.net, inv.currency, lang)}</p>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+                <details className="mt-2 pl-7" open={item.discount.value > 0}>
+                  <summary className="min-h-9 cursor-pointer py-2 text-xs font-semibold text-muted">Diskon item</summary>
+                  <div className="flex gap-2">
+                    <div className="w-28 shrink-0">
+                      <Select
+                        aria-label="Jenis diskon item"
+                        value={item.discount.type}
+                        onChange={(e) => setItem(item.id, { discount: { ...item.discount, type: e.target.value as 'percent' | 'amount' } })}
+                      >
+                        <option value="percent">Persen</option>
+                        <option value="amount">Nominal</option>
+                      </Select>
+                    </div>
+                    <NumberInput
+                      aria-label="Nilai diskon item"
+                      className="flex-1"
+                      lang={lang}
+                      decimals={item.discount.type === 'percent' ? 2 : dec}
+                      suffix={item.discount.type === 'percent' ? '%' : undefined}
+                      value={item.discount.value}
+                      onChange={(v) => setItem(item.id, { discount: { ...item.discount, value: v } })}
+                    />
+                  </div>
+                </details>
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2 pl-7">
+                  <div className="flex">
+                    <IconButton label="Naikkan urutan" disabled={idx === 0} onClick={() => move(idx)}>
+                      <IconUp size={18} />
+                    </IconButton>
+                    <IconButton label="Duplikat item" onClick={() => duplicate(idx)}>
+                      <IconCopy size={18} />
+                    </IconButton>
+                    <IconButton label="Hapus item" disabled={inv.items.length <= 1} onClick={() => remove(idx)}>
+                      <IconTrash size={18} />
+                    </IconButton>
+                  </div>
+                  <p className="num text-right font-bold">{formatMoney(lt.net, inv.currency, lang)}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
 
       <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-3">
         <div className="flex flex-wrap gap-2">
